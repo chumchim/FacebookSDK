@@ -22,6 +22,12 @@ public record FacebookMessage
     [JsonPropertyName("reply_to")]
     public FacebookReplyTo? ReplyTo { get; init; }
 
+    /// <summary>
+    /// Is Echo - ถ้าเป็น true แสดงว่าเป็นข้อความที่ page ส่งเอง (ไม่ใช่จากลูกค้า)
+    /// </summary>
+    [JsonPropertyName("is_echo")]
+    public bool IsEcho { get; init; }
+
     #region Helper Properties
 
     [JsonIgnore]
@@ -29,6 +35,12 @@ public record FacebookMessage
 
     [JsonIgnore]
     public bool HasAttachments => Attachments?.Any() == true;
+
+    /// <summary>
+    /// ตรวจสอบว่าเป็น Text Message หรือไม่
+    /// </summary>
+    [JsonIgnore]
+    public bool IsTextMessage => HasText && !HasAttachments && QuickReply == null;
 
     [JsonIgnore]
     public bool IsQuickReply => QuickReply != null;
@@ -67,6 +79,18 @@ public record FacebookAttachment
     [JsonIgnore]
     public bool IsFallback => Type.Equals("fallback", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// ตรวจสอบว่าเป็น Sticker หรือไม่
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSticker => Payload?.StickerId != null;
+
+    /// <summary>
+    /// URL ของ attachment (shorthand)
+    /// </summary>
+    [JsonIgnore]
+    public string? Url => Payload?.Url;
+
     #endregion
 }
 
@@ -95,6 +119,18 @@ public record FacebookCoordinates
 
     [JsonPropertyName("long")]
     public double Longitude { get; init; }
+
+    /// <summary>
+    /// Lat (shorthand alias for Latitude)
+    /// </summary>
+    [JsonIgnore]
+    public double Lat => Latitude;
+
+    /// <summary>
+    /// Long (shorthand alias for Longitude)
+    /// </summary>
+    [JsonIgnore]
+    public double Long => Longitude;
 }
 
 /// <summary>

@@ -49,6 +49,9 @@ public record FacebookMessagingEvent
     [JsonPropertyName("postback")]
     public FacebookPostback? Postback { get; init; }
 
+    [JsonPropertyName("referral")]
+    public FacebookReferral? Referral { get; init; }
+
     [JsonPropertyName("delivery")]
     public FacebookDelivery? Delivery { get; init; }
 
@@ -64,12 +67,51 @@ public record FacebookMessagingEvent
     public bool IsPostbackEvent => Postback != null;
 
     [JsonIgnore]
+    public bool IsReferralEvent => Referral != null && Postback == null;
+
+    [JsonIgnore]
     public bool IsDeliveryEvent => Delivery != null;
 
     [JsonIgnore]
     public bool IsReadEvent => Read != null;
 
+    /// <summary>
+    /// ตรวจสอบว่าเป็น echo message หรือไม่ (ข้อความที่ page ส่งเอง)
+    /// </summary>
+    [JsonIgnore]
+    public bool IsEcho => Message?.IsEcho == true;
+
+    /// <summary>
+    /// ประเภท Event
+    /// </summary>
+    [JsonIgnore]
+    public FacebookEventType EventType
+    {
+        get
+        {
+            if (IsMessageEvent) return FacebookEventType.Message;
+            if (IsPostbackEvent) return FacebookEventType.Postback;
+            if (IsReferralEvent) return FacebookEventType.Referral;
+            if (IsDeliveryEvent) return FacebookEventType.Delivery;
+            if (IsReadEvent) return FacebookEventType.Read;
+            return FacebookEventType.Unknown;
+        }
+    }
+
     #endregion
+}
+
+/// <summary>
+/// Facebook Event Types
+/// </summary>
+public enum FacebookEventType
+{
+    Unknown,
+    Message,
+    Postback,
+    Referral,
+    Delivery,
+    Read
 }
 
 /// <summary>

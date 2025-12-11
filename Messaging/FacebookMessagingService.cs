@@ -45,6 +45,22 @@ public class FacebookMessagingService : IFacebookMessaging
 
     #endregion
 
+    #region Attachment Messages
+
+    public Task SendImageAsync(string imageUrl, string recipientId, CancellationToken ct = default)
+        => SendAsync(new ImageMessage(imageUrl), recipientId, ct);
+
+    public Task SendVideoAsync(string videoUrl, string recipientId, CancellationToken ct = default)
+        => SendAsync(new VideoMessage(videoUrl), recipientId, ct);
+
+    public Task SendAudioAsync(string audioUrl, string recipientId, CancellationToken ct = default)
+        => SendAsync(new AudioMessage(audioUrl), recipientId, ct);
+
+    public Task SendFileAsync(string fileUrl, string recipientId, CancellationToken ct = default)
+        => SendAsync(new FileMessage(fileUrl), recipientId, ct);
+
+    #endregion
+
     #region Sender Actions
 
     public Task SendTypingOnAsync(string recipientId, CancellationToken ct = default)

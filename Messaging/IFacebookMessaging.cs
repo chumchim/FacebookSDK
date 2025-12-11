@@ -40,6 +40,30 @@ public interface IFacebookMessaging
 
     #endregion
 
+    #region Attachment Messages
+
+    /// <summary>
+    /// ส่งรูปภาพ
+    /// </summary>
+    Task SendImageAsync(string imageUrl, string recipientId, CancellationToken ct = default);
+
+    /// <summary>
+    /// ส่งวิดีโอ
+    /// </summary>
+    Task SendVideoAsync(string videoUrl, string recipientId, CancellationToken ct = default);
+
+    /// <summary>
+    /// ส่งไฟล์เสียง
+    /// </summary>
+    Task SendAudioAsync(string audioUrl, string recipientId, CancellationToken ct = default);
+
+    /// <summary>
+    /// ส่งไฟล์
+    /// </summary>
+    Task SendFileAsync(string fileUrl, string recipientId, CancellationToken ct = default);
+
+    #endregion
+
     #region Message Tags
 
     /// <summary>
