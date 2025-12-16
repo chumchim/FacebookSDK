@@ -71,5 +71,29 @@ public interface IFacebookMessaging
     /// </summary>
     Task SendWithTagAsync(IFacebookMessage message, string recipientId, string tag, CancellationToken ct = default);
 
+    /// <summary>
+    /// ส่งข้อความพร้อม tag enum (สำหรับส่งหลัง 24 ชม.)
+    /// </summary>
+    Task SendWithTagAsync(IFacebookMessage message, string recipientId, MessageTagType tag, CancellationToken ct = default);
+
+    /// <summary>
+    /// ส่ง text message พร้อม tag (สำหรับส่งหลัง 24 ชม.)
+    /// </summary>
+    Task SendWithTagAsync(string message, string recipientId, MessageTagType tag, CancellationToken ct = default);
+
+    #endregion
+
+    #region Persona Messages
+
+    /// <summary>
+    /// ส่งข้อความในนาม persona
+    /// </summary>
+    Task SendWithPersonaAsync(IFacebookMessage message, string recipientId, string personaId, CancellationToken ct = default);
+
+    /// <summary>
+    /// ส่ง text message ในนาม persona
+    /// </summary>
+    Task SendWithPersonaAsync(string message, string recipientId, string personaId, CancellationToken ct = default);
+
     #endregion
 }

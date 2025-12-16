@@ -100,13 +100,40 @@ public class FacebookMessagingService : IFacebookMessaging
         await SendToGraphApiAsync(payload, ct);
     }
 
+    public Task SendWithTagAsync(IFacebookMessage message, string recipientId, MessageTagType tag, CancellationToken ct = default)
+        => SendWithTagAsync(message, recipientId, tag.ToApiString(), ct);
+
+    public Task SendWithTagAsync(string message, string recipientId, MessageTagType tag, CancellationToken ct = default)
+        => SendWithTagAsync(new TextMessage(message), recipientId, tag.ToApiString(), ct);
+
+    #endregion
+
+    #region Persona Messages
+
+    public async Task SendWithPersonaAsync(IFacebookMessage message, string recipientId, string personaId, CancellationToken ct = default)
+    {
+        var payload = new
+        {
+            recipient = new { id = recipientId },
+            message = message.ToJson(),
+            persona_id = personaId
+        };
+
+        await SendToGraphApiAsync(payload, ct);
+    }
+
+    public Task SendWithPersonaAsync(string message, string recipientId, string personaId, CancellationToken ct = default)
+        => SendWithPersonaAsync(new TextMessage(message), recipientId, personaId, ct);
+
     #endregion
 
     #region Private Methods
 
     private async Task SendToGraphApiAsync(object payload, CancellationToken ct)
     {
-        var url = $"{BaseUrl}/{_options.ApiVersion}/me/messages?access_token={_options.PageAccessToken}";
+        // Use PageId instead of "me" for Page Access Tokens
+        var pageId = _options.PageId ?? throw new InvalidOperationException("Facebook PageId is required for sending messages");
+        var url = $"{BaseUrl}/{_options.ApiVersion}/{pageId}/messages?access_token={_options.PageAccessToken}";
 
         try
         {

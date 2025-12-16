@@ -42,7 +42,10 @@ public class FacebookProfileService : IFacebookProfile
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger?.LogWarning("Failed to get profile for user {UserId}: {StatusCode}", userId, response.StatusCode);
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                _logger?.LogWarning(
+                    "Failed to get profile for user {UserId}: {StatusCode}. Error: {Error}",
+                    userId, response.StatusCode, errorBody);
                 return null;
             }
 
