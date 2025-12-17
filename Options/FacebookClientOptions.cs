@@ -38,6 +38,13 @@ public class FacebookClientOptions
     public string ApiVersion { get; set; } = "v18.0";
 
     /// <summary>
+    /// Use Conversations API instead of Profile API for fetching user profiles.
+    /// Conversations API works without App Review (no pages_read_user_content permission needed).
+    /// Default: true
+    /// </summary>
+    public bool UseConversationsApi { get; set; } = true;
+
+    /// <summary>
     /// Validate options
     /// </summary>
     public void Validate()
