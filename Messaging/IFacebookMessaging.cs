@@ -218,6 +218,50 @@ public interface IFacebookMessaging
     Task<FacebookSendResult> SendWithHumanAgentFallbackAsync(string message, string recipientId, CancellationToken ct = default);
 
     #endregion
+
+    #region Upload and Send (File Data)
+
+    /// <summary>
+    /// อัปโหลดรูปภาพและส่งพร้อม fallback strategy
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Upload + Send:</b> Uploads image data to Facebook, then sends to recipient.</para>
+    /// <para><b>Fallback:</b> Tries standard messaging first, then HUMAN_AGENT tag if outside 24h window.</para>
+    /// <para><b>Limits:</b> Max 25MB</para>
+    /// </remarks>
+    /// <param name="fileData">Image file data as byte array</param>
+    /// <param name="fileName">Original file name</param>
+    /// <param name="recipientId">PSID (Page-Scoped User ID)</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Result with success status and method used</returns>
+    Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
+        byte[] fileData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// อัปโหลดไฟล์และส่งพร้อม fallback strategy
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Upload + Send:</b> Uploads file data to Facebook, then sends to recipient.</para>
+    /// <para><b>Fallback:</b> Tries standard messaging first, then HUMAN_AGENT tag if outside 24h window.</para>
+    /// <para><b>Limits:</b> Max 25MB</para>
+    /// </remarks>
+    /// <param name="fileData">File data as byte array</param>
+    /// <param name="fileName">Original file name</param>
+    /// <param name="contentType">MIME type of the file</param>
+    /// <param name="recipientId">PSID (Page-Scoped User ID)</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Result with success status and method used</returns>
+    Task<FacebookSendResult> UploadAndSendFileAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string recipientId,
+        CancellationToken ct = default);
+
+    #endregion
 }
 
 /// <summary>

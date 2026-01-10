@@ -206,6 +206,199 @@ public class FacebookMessagingService : IFacebookMessaging
 
     #endregion
 
+    #region Upload and Send (File Data)
+
+    public async Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
+        byte[] fileData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default)
+    {
+        return await UploadAndSendAttachmentWithFallbackAsync(
+            fileData, fileName, "image/jpeg", "image", recipientId, ct);
+    }
+
+    public async Task<FacebookSendResult> UploadAndSendFileAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string recipientId,
+        CancellationToken ct = default)
+    {
+        var attachmentType = GetAttachmentTypeFromContentType(contentType);
+        return await UploadAndSendAttachmentWithFallbackAsync(
+            fileData, fileName, contentType, attachmentType, recipientId, ct);
+    }
+
+    private async Task<FacebookSendResult> UploadAndSendAttachmentWithFallbackAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string attachmentType,
+        string recipientId,
+        CancellationToken ct)
+    {
+        try
+        {
+            // Step 1: Upload attachment and get attachment_id
+            var attachmentId = await UploadAttachmentAsync(fileData, fileName, contentType, attachmentType, ct);
+            if (string.IsNullOrEmpty(attachmentId))
+            {
+                return FacebookSendResult.Failed("Failed to upload attachment to Facebook");
+            }
+
+            // Step 2: Send with fallback strategy
+            return await SendAttachmentWithFallbackAsync(attachmentId, attachmentType, recipientId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to upload and send attachment to Facebook");
+            return FacebookSendResult.Failed(ex.Message);
+        }
+    }
+
+    private async Task<string?> UploadAttachmentAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string attachmentType,
+        CancellationToken ct)
+    {
+        var pageId = _options.PageId ?? throw new InvalidOperationException("Facebook PageId is required");
+        var url = $"{BaseUrl}/{_options.ApiVersion}/{pageId}/message_attachments?access_token={_options.PageAccessToken}";
+
+        using var content = new MultipartFormDataContent();
+
+        // Add the message part (required for attachment upload)
+        var messageJson = $"{{\"attachment\":{{\"type\":\"{attachmentType}\",\"payload\":{{\"is_reusable\":true}}}}}}";
+        content.Add(new StringContent(messageJson), "message");
+
+        // Add the file
+        var fileContent = new ByteArrayContent(fileData);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        content.Add(fileContent, "filedata", fileName);
+
+        try
+        {
+            var response = await _httpClient.PostAsync(url, content, ct);
+            var responseText = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger?.LogError("Facebook attachment upload failed: {StatusCode} - {Error}",
+                    response.StatusCode, responseText);
+                return null;
+            }
+
+            // Parse response to get attachment_id
+            using var doc = JsonDocument.Parse(responseText);
+            if (doc.RootElement.TryGetProperty("attachment_id", out var attachmentIdElement))
+            {
+                return attachmentIdElement.GetString();
+            }
+
+            _logger?.LogWarning("Facebook attachment upload response missing attachment_id: {Response}", responseText);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to upload attachment to Facebook");
+            return null;
+        }
+    }
+
+    private async Task<FacebookSendResult> SendAttachmentWithFallbackAsync(
+        string attachmentId,
+        string attachmentType,
+        string recipientId,
+        CancellationToken ct)
+    {
+        // Step 1: Try standard messaging first
+        var standardPayload = new
+        {
+            recipient = new { id = recipientId },
+            message = new
+            {
+                attachment = new
+                {
+                    type = attachmentType,
+                    payload = new { attachment_id = attachmentId }
+                }
+            }
+        };
+
+        var (success, errorResponse, _) = await TrySendToGraphApiAsync(standardPayload, ct);
+
+        if (success)
+        {
+            _logger?.LogDebug("Facebook attachment sent successfully using standard messaging");
+            return FacebookSendResult.Ok(FacebookSendMethod.Standard);
+        }
+
+        // Parse error to check if we need HUMAN_AGENT tag
+        var errorInfo = ParseFacebookError(errorResponse);
+
+        if (!IsOutsideMessagingWindowError(errorInfo))
+        {
+            _logger?.LogWarning("Facebook attachment send failed with non-window error: {Error}", errorResponse);
+            return FacebookSendResult.Failed(errorInfo.Message ?? "Failed to send attachment");
+        }
+
+        _logger?.LogInformation("Standard messaging failed (outside 24h window), trying HUMAN_AGENT tag for attachment...");
+
+        // Step 2: Try with HUMAN_AGENT tag
+        var taggedPayload = new
+        {
+            recipient = new { id = recipientId },
+            message = new
+            {
+                attachment = new
+                {
+                    type = attachmentType,
+                    payload = new { attachment_id = attachmentId }
+                }
+            },
+            messaging_type = "MESSAGE_TAG",
+            tag = "HUMAN_AGENT"
+        };
+
+        (success, errorResponse, _) = await TrySendToGraphApiAsync(taggedPayload, ct);
+
+        if (success)
+        {
+            _logger?.LogInformation("Facebook attachment sent successfully using HUMAN_AGENT tag");
+            return FacebookSendResult.Ok(FacebookSendMethod.HumanAgentTag);
+        }
+
+        errorInfo = ParseFacebookError(errorResponse);
+
+        if (IsHumanAgentPermissionDenied(errorInfo))
+        {
+            _logger?.LogError("HUMAN_AGENT tag permission denied for attachment");
+            return FacebookSendResult.Failed(
+                "HUMAN_AGENT tag requires Facebook approval",
+                humanAgentRequired: true,
+                humanAgentDenied: true);
+        }
+
+        return FacebookSendResult.Failed(
+            errorInfo.Message ?? "Failed to send attachment with HUMAN_AGENT tag",
+            humanAgentRequired: true);
+    }
+
+    private static string GetAttachmentTypeFromContentType(string contentType)
+    {
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return "image";
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+            return "video";
+        if (contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+            return "audio";
+        return "file";
+    }
+
+    #endregion
+
     #region Private Methods
 
     private async Task SendToGraphApiAsync(object payload, CancellationToken ct)
