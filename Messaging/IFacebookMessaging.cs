@@ -72,10 +72,10 @@ public interface IFacebookMessaging
 
     #endregion
 
-    #region Attachment Messages
+    #region Attachment Messages (URL-based)
 
     /// <summary>
-    /// ส่งรูปภาพ
+    /// ส่งรูปภาพ (ใช้ URL - Facebook จะมา fetch)
     /// </summary>
     /// <remarks>
     /// <para><b>24-Hour Window:</b> Only works within 24 hours of user's last message.</para>
@@ -84,7 +84,7 @@ public interface IFacebookMessaging
     Task SendImageAsync(string imageUrl, string recipientId, CancellationToken ct = default);
 
     /// <summary>
-    /// ส่งวิดีโอ
+    /// ส่งวิดีโอ (ใช้ URL - Facebook จะมา fetch)
     /// </summary>
     /// <remarks>
     /// <para><b>24-Hour Window:</b> Only works within 24 hours of user's last message.</para>
@@ -93,7 +93,7 @@ public interface IFacebookMessaging
     Task SendVideoAsync(string videoUrl, string recipientId, CancellationToken ct = default);
 
     /// <summary>
-    /// ส่งไฟล์เสียง
+    /// ส่งไฟล์เสียง (ใช้ URL - Facebook จะมา fetch)
     /// </summary>
     /// <remarks>
     /// <para><b>24-Hour Window:</b> Only works within 24 hours of user's last message.</para>
@@ -102,13 +102,45 @@ public interface IFacebookMessaging
     Task SendAudioAsync(string audioUrl, string recipientId, CancellationToken ct = default);
 
     /// <summary>
-    /// ส่งไฟล์
+    /// ส่งไฟล์ (ใช้ URL - Facebook จะมา fetch)
     /// </summary>
     /// <remarks>
     /// <para><b>24-Hour Window:</b> Only works within 24 hours of user's last message.</para>
     /// <para><b>Limits:</b> Max 25MB</para>
     /// </remarks>
     Task SendFileAsync(string fileUrl, string recipientId, CancellationToken ct = default);
+
+    #endregion
+
+    #region Attachment Upload (Binary upload)
+
+    /// <summary>
+    /// Upload และส่งรูปภาพโดยตรง (ไม่ต้องมี public URL)
+    /// </summary>
+    Task<FacebookSendResult> UploadAndSendImageAsync(
+        byte[] imageData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Upload และส่งรูปภาพโดยตรง (ไม่ต้องมี public URL) พร้อม HUMAN_AGENT fallback
+    /// </summary>
+    Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
+        byte[] imageData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Upload และส่งไฟล์โดยตรง (ไม่ต้องมี public URL)
+    /// </summary>
+    Task<FacebookSendResult> UploadAndSendFileAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string recipientId,
+        CancellationToken ct = default);
 
     #endregion
 

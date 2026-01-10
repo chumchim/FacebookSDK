@@ -46,7 +46,7 @@ public class FacebookMessagingService : IFacebookMessaging
 
     #endregion
 
-    #region Attachment Messages
+    #region Attachment Messages (URL-based)
 
     public Task SendImageAsync(string imageUrl, string recipientId, CancellationToken ct = default)
         => SendAsync(new ImageMessage(imageUrl), recipientId, ct);
@@ -59,6 +59,201 @@ public class FacebookMessagingService : IFacebookMessaging
 
     public Task SendFileAsync(string fileUrl, string recipientId, CancellationToken ct = default)
         => SendAsync(new FileMessage(fileUrl), recipientId, ct);
+
+    #endregion
+
+    #region Attachment Upload (Binary upload)
+
+    public async Task<FacebookSendResult> UploadAndSendImageAsync(
+        byte[] imageData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default)
+    {
+        return await UploadAndSendAttachmentAsync(imageData, fileName, "image", recipientId, ct);
+    }
+
+    public async Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
+        byte[] imageData,
+        string fileName,
+        string recipientId,
+        CancellationToken ct = default)
+    {
+        // Try standard upload first
+        var result = await UploadAndSendAttachmentAsync(imageData, fileName, "image", recipientId, ct);
+
+        if (result.Success)
+            return result;
+
+        // Check if it's a messaging window error
+        if (result.ErrorMessage?.Contains("24", StringComparison.OrdinalIgnoreCase) == true ||
+            result.ErrorMessage?.Contains("window", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            _logger?.LogInformation("Standard upload failed (outside 24h window), trying with HUMAN_AGENT tag...");
+            return await UploadAndSendAttachmentWithTagAsync(imageData, fileName, "image", recipientId, "HUMAN_AGENT", ct);
+        }
+
+        return result;
+    }
+
+    public async Task<FacebookSendResult> UploadAndSendFileAsync(
+        byte[] fileData,
+        string fileName,
+        string contentType,
+        string recipientId,
+        CancellationToken ct = default)
+    {
+        var attachmentType = GetAttachmentTypeFromContentType(contentType);
+        return await UploadAndSendAttachmentAsync(fileData, fileName, attachmentType, recipientId, ct);
+    }
+
+    /// <summary>
+    /// Upload and send attachment via multipart/form-data
+    /// </summary>
+    private async Task<FacebookSendResult> UploadAndSendAttachmentAsync(
+        byte[] fileData,
+        string fileName,
+        string attachmentType,
+        string recipientId,
+        CancellationToken ct)
+    {
+        var pageId = _options.PageId ?? throw new InvalidOperationException("Facebook PageId is required");
+        var url = $"{BaseUrl}/{_options.ApiVersion}/{pageId}/messages?access_token={_options.PageAccessToken}";
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            // Add recipient
+            content.Add(new StringContent($"{{\"id\":\"{recipientId}\"}}"), "recipient");
+
+            // Add message with attachment
+            var messageJson = $"{{\"attachment\":{{\"type\":\"{attachmentType}\",\"payload\":{{\"is_reusable\":false}}}}}}";
+            content.Add(new StringContent(messageJson), "message");
+
+            // Add file data
+            var fileContent = new ByteArrayContent(fileData);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(GetMimeType(fileName, attachmentType));
+            content.Add(fileContent, "filedata", fileName);
+
+            var response = await _httpClient.PostAsync(url, content, ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger?.LogInformation("Facebook attachment uploaded and sent successfully: {FileName}", fileName);
+                return FacebookSendResult.Ok(FacebookSendMethod.Standard);
+            }
+
+            var error = await response.Content.ReadAsStringAsync(ct);
+            _logger?.LogError("Facebook attachment upload failed: {StatusCode} - {Error}", response.StatusCode, error);
+
+            var errorInfo = ParseFacebookError(error);
+            return FacebookSendResult.Failed(errorInfo.Message ?? error);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Facebook attachment upload failed");
+            return FacebookSendResult.Failed(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Upload and send attachment with message tag
+    /// </summary>
+    private async Task<FacebookSendResult> UploadAndSendAttachmentWithTagAsync(
+        byte[] fileData,
+        string fileName,
+        string attachmentType,
+        string recipientId,
+        string tag,
+        CancellationToken ct)
+    {
+        var pageId = _options.PageId ?? throw new InvalidOperationException("Facebook PageId is required");
+        var url = $"{BaseUrl}/{_options.ApiVersion}/{pageId}/messages?access_token={_options.PageAccessToken}";
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            // Add recipient
+            content.Add(new StringContent($"{{\"id\":\"{recipientId}\"}}"), "recipient");
+
+            // Add message with attachment
+            var messageJson = $"{{\"attachment\":{{\"type\":\"{attachmentType}\",\"payload\":{{\"is_reusable\":false}}}}}}";
+            content.Add(new StringContent(messageJson), "message");
+
+            // Add messaging_type and tag for outside 24h window
+            content.Add(new StringContent("MESSAGE_TAG"), "messaging_type");
+            content.Add(new StringContent(tag), "tag");
+
+            // Add file data
+            var fileContent = new ByteArrayContent(fileData);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(GetMimeType(fileName, attachmentType));
+            content.Add(fileContent, "filedata", fileName);
+
+            var response = await _httpClient.PostAsync(url, content, ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger?.LogInformation("Facebook attachment uploaded with HUMAN_AGENT tag: {FileName}", fileName);
+                return FacebookSendResult.Ok(FacebookSendMethod.HumanAgentTag);
+            }
+
+            var error = await response.Content.ReadAsStringAsync(ct);
+            _logger?.LogError("Facebook attachment upload with tag failed: {StatusCode} - {Error}", response.StatusCode, error);
+
+            var errorInfo = ParseFacebookError(error);
+
+            if (IsHumanAgentPermissionDenied(errorInfo))
+            {
+                return FacebookSendResult.Failed(
+                    "HUMAN_AGENT tag requires Facebook approval",
+                    humanAgentRequired: true,
+                    humanAgentDenied: true);
+            }
+
+            return FacebookSendResult.Failed(errorInfo.Message ?? error, humanAgentRequired: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Facebook attachment upload with tag failed");
+            return FacebookSendResult.Failed(ex.Message);
+        }
+    }
+
+    private static string GetAttachmentTypeFromContentType(string contentType)
+    {
+        return contentType.ToLowerInvariant() switch
+        {
+            string t when t.StartsWith("image/") => "image",
+            string t when t.StartsWith("video/") => "video",
+            string t when t.StartsWith("audio/") => "audio",
+            _ => "file"
+        };
+    }
+
+    private static string GetMimeType(string fileName, string attachmentType)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".mp4" => "video/mp4",
+            ".mp3" => "audio/mpeg",
+            ".m4a" => "audio/m4a",
+            ".pdf" => "application/pdf",
+            _ => attachmentType switch
+            {
+                "image" => "image/jpeg",
+                "video" => "video/mp4",
+                "audio" => "audio/mpeg",
+                _ => "application/octet-stream"
+            }
+        };
+    }
 
     #endregion
 
