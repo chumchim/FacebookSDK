@@ -123,25 +123,6 @@ public interface IFacebookMessaging
         string recipientId,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Upload และส่งรูปภาพโดยตรง (ไม่ต้องมี public URL) พร้อม HUMAN_AGENT fallback
-    /// </summary>
-    Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
-        byte[] imageData,
-        string fileName,
-        string recipientId,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Upload และส่งไฟล์โดยตรง (ไม่ต้องมี public URL)
-    /// </summary>
-    Task<FacebookSendResult> UploadAndSendFileAsync(
-        byte[] fileData,
-        string fileName,
-        string contentType,
-        string recipientId,
-        CancellationToken ct = default);
-
     #endregion
 
     #region Message Tags

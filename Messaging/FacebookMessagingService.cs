@@ -73,40 +73,6 @@ public class FacebookMessagingService : IFacebookMessaging
         return await UploadAndSendAttachmentAsync(imageData, fileName, "image", recipientId, ct);
     }
 
-    public async Task<FacebookSendResult> UploadAndSendImageWithFallbackAsync(
-        byte[] imageData,
-        string fileName,
-        string recipientId,
-        CancellationToken ct = default)
-    {
-        // Try standard upload first
-        var result = await UploadAndSendAttachmentAsync(imageData, fileName, "image", recipientId, ct);
-
-        if (result.Success)
-            return result;
-
-        // Check if it's a messaging window error
-        if (result.ErrorMessage?.Contains("24", StringComparison.OrdinalIgnoreCase) == true ||
-            result.ErrorMessage?.Contains("window", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            _logger?.LogInformation("Standard upload failed (outside 24h window), trying with HUMAN_AGENT tag...");
-            return await UploadAndSendAttachmentWithTagAsync(imageData, fileName, "image", recipientId, "HUMAN_AGENT", ct);
-        }
-
-        return result;
-    }
-
-    public async Task<FacebookSendResult> UploadAndSendFileAsync(
-        byte[] fileData,
-        string fileName,
-        string contentType,
-        string recipientId,
-        CancellationToken ct = default)
-    {
-        var attachmentType = GetAttachmentTypeFromContentType(contentType);
-        return await UploadAndSendAttachmentAsync(fileData, fileName, attachmentType, recipientId, ct);
-    }
-
     /// <summary>
     /// Upload and send attachment via multipart/form-data
     /// </summary>
@@ -219,17 +185,6 @@ public class FacebookMessagingService : IFacebookMessaging
             _logger?.LogError(ex, "Facebook attachment upload with tag failed");
             return FacebookSendResult.Failed(ex.Message);
         }
-    }
-
-    private static string GetAttachmentTypeFromContentType(string contentType)
-    {
-        return contentType.ToLowerInvariant() switch
-        {
-            string t when t.StartsWith("image/") => "image",
-            string t when t.StartsWith("video/") => "video",
-            string t when t.StartsWith("audio/") => "audio",
-            _ => "file"
-        };
     }
 
     private static string GetMimeType(string fileName, string attachmentType)
